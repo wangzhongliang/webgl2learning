@@ -21,6 +21,7 @@ function GLInstance(canvasID){
 	//...................................................
 	//Setup custom properties
 	gl.mMeshCache = [];	//Cache all the mesh structs, easy to unload buffers if they all exist in one place.
+	gl.mTextureCache = [];
 
 	gl.cullFace(gl.BACK);//设置后向剔除面
 	gl.frontFace(gl.CCW);//逆时针绘制的面为前面
@@ -110,7 +111,25 @@ function GLInstance(canvasID){
 		return rtn;
 	}
 
+	gl.fLoadTexture = function(name,img,doYFlip){
+		var tex = this.createTexture();
+		if(doYFlip === true){//Blender可能导出的texture是flipY的
+			this.pixelStorei(this.UNPACK_FLIP_Y_WEBGL,true);
+		}
+		this.bindTexture(this.TEXTURE_2D, tex);
+		this.texImage2D(this.TEXTURE_2D, 0, this.RGBA, this.RGBA, this.UNSIGNED_BYTE,img);
 
+		this.texParameteri(this.TEXTURE_2D, this.TEXTURE_MAG_FILTER, this.LINEAR);
+		this.texParameteri(this.TEXTURE_2D, this.TEXTURE_MIN_FILTER, this.LINEAR_MIPMAP_NEAREST);
+		this.generateMipmap(this.TEXTURE_2D);
+
+		this.bindTexture(this.TEXTURE_2D,null);
+		this.mTextureCache[name] = tex;
+
+		if(doYFlip === true){//Blender可能导出的texture是flipY的
+			this.pixelStorei(this.UNPACK_FLIP_Y_WEBGL,false);
+		}
+	}
 	//...................................................
 	//Setters - Getters
 

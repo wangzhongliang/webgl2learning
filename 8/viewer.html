@@ -29,13 +29,15 @@
 				gCamera = new Camera(gl);
 				gCamera.transform.position.set(0,1,3);
 				gCameraCtrl = new CameraController(gl,gCamera);
+
+				gl.fLoadTexture("tex001",document.getElementById("imgTex"));
 				
 				//三维坐标系
 				gGridShader = new GridAxisShader(gl,gCamera.projectionMatrix); //Gray,Red,Green,Blue
 				gGridModel = Primitives.GridAxis.createModal(gl,true);
 				
 				//四边形对象
-				gShader = new TestShader(gl, gCamera.projectionMatrix);
+				gShader = new TestShader(gl, gCamera.projectionMatrix).setTexture(gl.mTextureCache["tex001"]);
 				gModal = Primitives.MultiQuad.createModal(gl);
 				// gModal.setPosition(0,1,0).setScale(0.2,0.2,0.2);
 
@@ -48,10 +50,12 @@
 				gCamera.updateViewMatrix();
 				gl.fClear();
 
-				gGridShader.activate().setCameraMatrix(gCamera.viewMatrix)
+				gGridShader.activate()
+				.setCameraMatrix(gCamera.viewMatrix)
 				.renderModal(gGridModel.preRender());
 
-				gShader.activate().setCameraMatrix(gCamera.viewMatrix)
+				gShader.activate().preRender()//可以写在初始化的时候，不必每一帧都调用
+				.setCameraMatrix(gCamera.viewMatrix)
 				.renderModal(gModal.preRender())
 				// .renderModal(gModal2.preRender());
 			}
@@ -62,7 +66,21 @@
 					super(gl,vertSrc,fragSrc);
 					
 					this.setPerspective(pMatrix);
+					this.mainTexture = -1;
 					gl.useProgram(null); //Done setting up shader
+				}
+
+				setTexture(texID){
+					this.mainTexture = texID;
+					return this;
+				}
+
+				preRender(){
+					this.gl.activeTexture(this.gl.TEXTURE0);
+					this.gl.bindTexture(this.gl.TEXTURE_2D, this.mainTexture);
+					this.gl.uniform1i(this.uniformLoc.mainTexture,0);//预定义的texture uniform
+
+					return this;
 				}
 			}
 		</script>
@@ -71,6 +89,7 @@
 	<div>
 		<canvas id="glcanvas"></canvas>
 	</div>
+	<img src="uv.jpg" id="imgTex" style="display: none">
 
 	<script id="vertex_shader" type="x-shader/x-vertex">#version 300 es
 		in vec3 a_position;	//Standard position data.
@@ -80,22 +99,23 @@
 		uniform mat4 uCameraMatrix;		
 		uniform mat4 uMVMatrix;	
 		
-		out vec2 uv;
+		out highp vec2 texCoord;
 		
 		void main(void){
-			uv = a_uv;
+			texCoord = a_uv;
 			gl_Position = uPMatrix * uCameraMatrix * uMVMatrix * vec4(a_position, 1.0);
 		}
 	</script>
 
 	<script id="fragment_shader" type="x-shader/x-fragment">#version 300 es
 		precision mediump float;
-		in vec2 uv;
+		in highp vec2 texCoord;
+		uniform sampler2D uMainTex;
 
 		out vec4 finalColor;
 		void main(void){
-			float dist = distance(uv,vec2(0.5,0.5));
-			finalColor = vec4(uv,0.0,1.0-step(0.5,dist));
+			float dist = distance(texCoord,vec2(0.5,0.5));
+			finalColor = vec4(texture(uMainTex, texCoord).xyz,1.0-step(0.5,dist));
 		}
 	</script>
 

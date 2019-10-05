@@ -8,7 +8,25 @@ const ATTR_NORMAL_LOC		= 1;
 const ATTR_UV_NAME			= "a_uv";
 const ATTR_UV_LOC			= 2;
 
+class GlUtil{
+	static rgbArray(){
+		if(arguments.length === 0) return null;
+		var rtn = [];
 
+		for(var i=0,c,p;i<arguments.length;i++){
+			if(arguments[i].length<6) continue;
+			c = arguments[i];
+			p = (c[0]==="#")?1:0;
+
+			rtn.push(
+				parseInt(c[p]+c[p+1],16)/255,
+				parseInt(c[p+2]+c[p+3],16)/255,
+				parseInt(c[p+4]+c[p+5],16)/255,
+			);
+		}
+		return rtn;
+	}
+}
 //--------------------------------------------------
 // Custom GL Context Object
 //--------------------------------------------------
@@ -21,6 +39,7 @@ function GLInstance(canvasID){
 	//...................................................
 	//Setup custom properties
 	gl.mMeshCache = [];	//Cache all the mesh structs, easy to unload buffers if they all exist in one place.
+	gl.mTextureCache = [];
 
 	gl.cullFace(gl.BACK);//设置后向剔除面
 	gl.frontFace(gl.CCW);//逆时针绘制的面为前面
@@ -51,7 +70,7 @@ function GLInstance(canvasID){
 	}
 
 	//Turns arrays into GL buffers, then setup a VAO that will predefine the buffers to standard shader attributes.
-	gl.fCreateMeshVAO = function(name,aryInd,aryVert,aryNorm,aryUV){
+	gl.fCreateMeshVAO = function(name,aryInd,aryVert,aryNorm,aryUV,vertLen){
 		var rtn = { drawMode:this.TRIANGLES };
 
 		//Create and bind vao
@@ -62,13 +81,13 @@ function GLInstance(canvasID){
 		//Set up vertices
 		if(aryVert !== undefined && aryVert != null){
 			rtn.bufVertices = this.createBuffer();													//Create buffer...
-			rtn.vertexComponentLen = 3;																//How many floats make up a vertex
+			rtn.vertexComponentLen = vertLen||3;																//How many floats make up a vertex
 			rtn.vertexCount = aryVert.length / rtn.vertexComponentLen;								//How many vertices in the array
 
 			this.bindBuffer(this.ARRAY_BUFFER, rtn.bufVertices);
 			this.bufferData(this.ARRAY_BUFFER, new Float32Array(aryVert), this.STATIC_DRAW);		//then push array into it.
 			this.enableVertexAttribArray(ATTR_POSITION_LOC);										//Enable Attribute location
-			this.vertexAttribPointer(ATTR_POSITION_LOC,3,this.FLOAT,false,0,0);						//Put buffer at location of the vao
+			this.vertexAttribPointer(ATTR_POSITION_LOC,rtn.vertexComponentLen,this.FLOAT,false,0,0);						//Put buffer at location of the vao
 		}
 
 		//.......................................................
@@ -110,7 +129,25 @@ function GLInstance(canvasID){
 		return rtn;
 	}
 
+	gl.fLoadTexture = function(name,img,doYFlip){
+		var tex = this.createTexture();
+		if(doYFlip === true){//Blender可能导出的texture是flipY的
+			this.pixelStorei(this.UNPACK_FLIP_Y_WEBGL,true);
+		}
+		this.bindTexture(this.TEXTURE_2D, tex);
+		this.texImage2D(this.TEXTURE_2D, 0, this.RGBA, this.RGBA, this.UNSIGNED_BYTE,img);
 
+		this.texParameteri(this.TEXTURE_2D, this.TEXTURE_MAG_FILTER, this.LINEAR);
+		this.texParameteri(this.TEXTURE_2D, this.TEXTURE_MIN_FILTER, this.LINEAR_MIPMAP_NEAREST);
+		this.generateMipmap(this.TEXTURE_2D);
+
+		this.bindTexture(this.TEXTURE_2D,null);
+		this.mTextureCache[name] = tex;
+
+		if(doYFlip === true){//Blender可能导出的texture是flipY的
+			this.pixelStorei(this.UNPACK_FLIP_Y_WEBGL,false);
+		}
+	}
 	//...................................................
 	//Setters - Getters
 
