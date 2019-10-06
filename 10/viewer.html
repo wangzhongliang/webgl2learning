@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<style>
+			html,body{margin:0px; padding:0px; width:100%; height:100%;}
+			body{background-color:#404040;}
+			canvas{border:1px solid black;}
+			div{display:flex; width:100%; height:100%; align-items:center; justify-content:center;}
+		</style>
+
+		<script src="gl.js"></script>
+		<script src="Math.js"></script>
+		<script src="Shaders.js"></script>
+		<script src="Shaders_Extra.js"></script>
+		<script src="RenderLoop.js"></script>
+		<script src="Transform.js"></script>
+		<script src="Modal.js"></script>
+		<script src="Primitives.js"></script>
+		<script src="Camera.js"></script>
+
+		<script>
+			var gl, gRLoop,	gShader, gModal, gCamera, gCameraCtrl,gSkymap,gSkyMapShader;
+			var gGridShader, gGridModel,
+			gModal2;
+			window.addEventListener("load",function(){
+				//Main Setup
+				gl = GLInstance("glcanvas").fSetSize(500,500).fClear();
+				
+				gCamera = new Camera(gl);
+				gCamera.transform.position.set(0,1,3);
+				gCameraCtrl = new CameraController(gl,gCamera);
+
+				//图片材质
+				gl.fLoadTexture("tex001",document.getElementById("imgTex"));
+				//天空盒材质
+				gl.fLoadCubeMap("skymap01",[
+					document.getElementById("cube01_right"),document.getElementById("cube01_left"),
+					document.getElementById("cube01_top"),document.getElementById("cube01_bottom"),
+					document.getElementById("cube01_back"),document.getElementById("cube01_front"),
+				]);
+				gl.fLoadCubeMap("skymap02",[
+					document.getElementById("cube02_right"),document.getElementById("cube02_left"),
+					document.getElementById("cube02_top"),document.getElementById("cube02_bottom"),
+					document.getElementById("cube02_back"),document.getElementById("cube02_front"),
+				])
+				//三维坐标系
+				gGridShader = new GridAxisShader(gl,gCamera.projectionMatrix); //Gray,Red,Green,Blue
+				gGridModel = Primitives.GridAxis.createModal(gl,true);
+				
+				//四边形对象
+				gShader = new TestShader(gl, gCamera.projectionMatrix).setTexture(gl.mTextureCache["tex001"]).preRender();
+				// .setTexture(gl.mTextureCache["tex001"]);
+				gModal = Primitives.Cube.createModal(gl);
+				gModal.setPosition(0,0.6,0);
+
+				// gModal2 = new Modal(gl.mMeshCache["Quad"]);
+                
+				//Start Rendering
+				RLoop = new RenderLoop(onRender,30).start();
+			});
+			function onRender(dt){
+				gCamera.updateViewMatrix();
+				gl.fClear();
+
+				gGridShader.activate()
+				.setCameraMatrix(gCamera.viewMatrix)
+				.renderModal(gGridModel.preRender());
+
+				gShader.activate()
+				.setCameraMatrix(gCamera.viewMatrix)
+				.setTime(performance.now())
+				.renderModal(gModal.preRender())
+				// .renderModal(gModal2.preRender());
+			}
+			class TestShader extends Shader{
+				constructor(gl,pMatrix){
+					var vertSrc = ShaderUtil.domShaderSrc("vertex_shader"),
+						fragSrc = ShaderUtil.domShaderSrc("fragment_shader");
+					super(gl,vertSrc,fragSrc);
+					
+					//自定义uniform
+					this.uniformLoc.time = gl.getUniformLocation(this.program,"uTime");
+					var uColor = gl.getUniformLocation(this.program, "uColor");
+					gl.uniform3fv(uColor, new Float32Array(GlUtil.rgbArray("#FF0000","00FF00","0000FF","909090","C0C0C0","404040")));
+					this.setPerspective(pMatrix);
+					this.mainTexture = -1;
+					gl.useProgram(null); //Done setting up shader
+				}
+
+				setTime(t){
+					this.gl.uniform1f(this.uniformLoc.time,t);
+					return this;
+				}
+
+				setTexture(texID){
+					this.mainTexture = texID;
+					return this;
+				}
+
+				preRender(){
+					this.gl.activeTexture(this.gl.TEXTURE0);
+					this.gl.bindTexture(this.gl.TEXTURE_2D, this.mainTexture);
+					this.gl.uniform1i(this.uniformLoc.mainTexture,0);//预定义的texture uniform
+
+					return this;
+				}
+			}
+		</script>
+	</head>
+<body>
+	<div>
+		<canvas id="glcanvas"></canvas>
+	</div>
+	<img src="uv.jpg" id="imgTex" style="display: none">
+
+	<script id="vertex_shader" type="x-shader/x-vertex">#version 300 es
+		in vec4 a_position;	//Standard position data.
+		in vec3 a_norm;
+		in vec2 a_uv;
+
+		uniform mat4 uPMatrix;
+		uniform mat4 uCameraMatrix;		
+		uniform mat4 uMVMatrix;	
+		
+		uniform vec3 uColor[6];
+		uniform float uTime;
+
+		out lowp vec4 color;
+		out highp vec2 texCoord;
+
+		vec3 warp(vec3 p){
+			return p + 0.2 *abs(cos(uTime*0.002 + p.y)) * a_norm;
+		}
+		
+		void main(void){
+			texCoord = a_uv;
+			color = vec4(uColor[int(a_position.w)],1.0);
+			gl_Position = uPMatrix * uCameraMatrix * uMVMatrix * vec4(warp(a_position.xyz), 1.0);
+		}
+	</script>
+
+	<script id="fragment_shader" type="x-shader/x-fragment">#version 300 es
+		precision mediump float;
+		in vec4 color;
+		in highp vec2 texCoord;
+		uniform sampler2D uMainTex;
+
+		out vec4 finalColor;
+		void main(void){
+			finalColor = mix(color,texture(uMainTex,texCoord),0.2f);
+		}
+	</script>
+
+</body>
+</html>
