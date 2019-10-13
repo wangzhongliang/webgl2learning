@@ -24,7 +24,7 @@
 			gModal2;
 			window.addEventListener("load",function(){
 				//Main Setup
-				gl = GLInstance("glcanvas").fSetSize(500,500).fClear();
+				gl = GLInstance("glcanvas").fSetSize(800,500).fClear();
 				
 				gCamera = new Camera(gl);
 				gCamera.transform.position.set(0,1,3);
@@ -33,12 +33,12 @@
 				//图片材质
 				gl.fLoadTexture("tex001",document.getElementById("imgTex"));
 				//天空盒材质
-				gl.fLoadCubeMap("skymap01",[
+				gl.fLoadCubeMap("skybox01",[
 					document.getElementById("cube01_right"),document.getElementById("cube01_left"),
 					document.getElementById("cube01_top"),document.getElementById("cube01_bottom"),
 					document.getElementById("cube01_back"),document.getElementById("cube01_front"),
 				]);
-				gl.fLoadCubeMap("skymap02",[
+				gl.fLoadCubeMap("skybox02",[
 					document.getElementById("cube02_right"),document.getElementById("cube02_left"),
 					document.getElementById("cube02_top"),document.getElementById("cube02_bottom"),
 					document.getElementById("cube02_back"),document.getElementById("cube02_front"),
@@ -51,7 +51,10 @@
 				gShader = new TestShader(gl, gCamera.projectionMatrix).setTexture(gl.mTextureCache["tex001"]).preRender();
 				// .setTexture(gl.mTextureCache["tex001"]);
 				gModal = Primitives.Cube.createModal(gl);
-				gModal.setPosition(0,0.6,0);
+                gModal.setPosition(0,0.6,0);
+                
+                gSkymap = new Modal(Primitives.Cube.createMesh(gl,"Skymap",10,10,10,0,0,0));
+                gSkyMapShader = new SkyMapShader(gl, gCamera.projectionMatrix,gl.mTextureCache["skybox01"],gl.mTextureCache["skybox02"]);
 
 				// gModal2 = new Modal(gl.mMeshCache["Quad"]);
                 
@@ -61,6 +64,10 @@
 			function onRender(dt){
 				gCamera.updateViewMatrix();
 				gl.fClear();
+                gSkyMapShader.activate().preRender()
+                .setCameraMatrix(gCamera.getTranslatelessMatrix())
+                .setTime(performance.now())
+                .renderModal(gSkymap);
 
 				gGridShader.activate()
 				.setCameraMatrix(gCamera.viewMatrix)
@@ -104,6 +111,39 @@
 
 					return this;
 				}
+            }
+            
+            class SkyMapShader extends Shader{
+				constructor(gl,pMatrix,dayTex,nightTex){
+					var vertSrc = ShaderUtil.domShaderSrc("sky_vshader"),
+						fragSrc = ShaderUtil.domShaderSrc("sky_fshader");
+					super(gl,vertSrc,fragSrc);
+					
+					//自定义uniform
+					this.uniformLoc.time = gl.getUniformLocation(this.program,"uTime");
+					this.uniformLoc.dayTex = gl.getUniformLocation(this.program,"uDayTex");
+					this.uniformLoc.nightTex = gl.getUniformLocation(this.program,"uNightTex");
+                    this.setPerspective(pMatrix);
+                    this.texDay = dayTex;
+                    this.texNight = nightTex;
+					gl.useProgram(null); //Done setting up shader
+				}
+
+				setTime(t){
+					this.gl.uniform1f(this.uniformLoc.time,t);
+					return this;
+				}
+
+				preRender(){
+					this.gl.activeTexture(this.gl.TEXTURE0);
+					this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.texDay);
+                    this.gl.uniform1i(this.uniformLoc.dayTex,0);//预定义的texture uniform
+                    
+                    this.gl.activeTexture(this.gl.TEXTURE1);
+					this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.texNight);
+					this.gl.uniform1i(this.uniformLoc.nightTex,1);//预定义的texture uniform
+					return this;
+				}
 			}
 		</script>
 	</head>
@@ -112,6 +152,19 @@
 		<canvas id="glcanvas"></canvas>
 	</div>
 	<img src="uv.jpg" id="imgTex" style="display: none">
+	<img src="../common/Yokohama2/posx.jpg" id="cube01_right" style="display: none">
+	<img src="../common/Yokohama2/negx.jpg" id="cube01_left" style="display: none">
+	<img src="../common/Yokohama2/posy.jpg" id="cube01_top" style="display: none">
+	<img src="../common/Yokohama2/negy.jpg" id="cube01_bottom" style="display: none">
+	<img src="../common/Yokohama2/posz.jpg" id="cube01_back" style="display: none">
+    <img src="../common/Yokohama2/negz.jpg" id="cube01_front" style="display: none">
+    
+    <img src="../common/Yokohama3/posx.jpg" id="cube02_right" style="display: none">
+	<img src="../common/Yokohama3/negx.jpg" id="cube02_left" style="display: none">
+	<img src="../common/Yokohama3/posy.jpg" id="cube02_top" style="display: none">
+	<img src="../common/Yokohama3/negy.jpg" id="cube02_bottom" style="display: none">
+	<img src="../common/Yokohama3/posz.jpg" id="cube02_back" style="display: none">
+	<img src="../common/Yokohama3/negz.jpg" id="cube02_front" style="display: none">
 
 	<script id="vertex_shader" type="x-shader/x-vertex">#version 300 es
 		in vec4 a_position;	//Standard position data.
@@ -148,6 +201,36 @@
 		out vec4 finalColor;
 		void main(void){
 			finalColor = mix(color,texture(uMainTex,texCoord),0.2f);
+		}
+    </script>
+    
+    <script id="sky_vshader" type="x-shader/x-vertex">#version 300 es
+		in vec4 a_position;
+		in vec2 a_uv;
+
+		uniform mat4 uPMatrix;
+		uniform mat4 uCameraMatrix;		
+        uniform mat4 uMVMatrix;	
+        
+		out highp vec3 texCoord;
+		
+		void main(void){
+			texCoord = a_position.xyz;
+			gl_Position = uPMatrix * uCameraMatrix *uMVMatrix* vec4(a_position.xyz, 1.0);
+		}
+	</script>
+
+	<script id="sky_fshader" type="x-shader/x-fragment">#version 300 es
+		precision mediump float;
+
+        in highp vec3 texCoord;
+		uniform samplerCube uDayTex;
+		uniform samplerCube uNightTex;
+        uniform float uTime;
+
+		out vec4 finalColor;
+		void main(void){
+			finalColor = mix(texture(uDayTex,texCoord),texture(uNightTex,texCoord),abs(sin(uTime*0.0005)));
 		}
 	</script>
 
