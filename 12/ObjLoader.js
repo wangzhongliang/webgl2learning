@@ -1,5 +1,5 @@
 class ObjLoader{
-    static domToMesh(meshName,elmID,flipYUV){
+    static domToMesh(meshName,elmID,flipYUV,keepRawData){
         var objects= ObjLoader.parseFromDom(elmID,flipYUV);
         var rtn = [];
         for(var name in objects){

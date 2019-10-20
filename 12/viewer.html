@@ -18,11 +18,14 @@
 		<script src="Primitives.js"></script>
 		<script src="Camera.js"></script>
 		<script src="ObjLoader.js"></script>
+		<script src="Debug.js"></script>
+		<script src="Skymap.js"></script>
+		<script src="GridFloor.js"></script>
 
 		<script>
-			var gl, gRLoop,	gShader, gModal, gCamera, gCameraCtrl,gSkymap,gSkyMapShader;
-			var gGridShader, gGridModel,
-			gModal2;
+            var gl, gRLoop,	gShader, gModal, gCamera, gCameraCtrl,gSkymap
+            var gGridFloor, mDebug, mDebugLine;
+			var gModal2;
 			window.addEventListener("load",function(){
 				//Main Setup
 				gl = GLInstance("glcanvas").fSetSize(800,500).fClear();
@@ -33,17 +36,11 @@
 
 				//图片材质
 				gl.fLoadTexture("tex001",document.getElementById("imgTex"));
-				//天空盒材质
-				gl.fLoadCubeMap("skybox01",[
-					document.getElementById("cube01_right"),document.getElementById("cube01_left"),
-					document.getElementById("cube01_top"),document.getElementById("cube01_bottom"),
-					document.getElementById("cube01_back"),document.getElementById("cube01_front"),
-				]);
-				gl.fLoadCubeMap("skybox02",[
-					document.getElementById("cube02_right"),document.getElementById("cube02_left"),
-					document.getElementById("cube02_top"),document.getElementById("cube02_bottom"),
-					document.getElementById("cube02_back"),document.getElementById("cube02_front"),
-				])
+                //天空盒材质
+                gSkymap = new Skymap(gl)
+                .setDayTexByDom("cube01_right","cube01_left","cube01_top","cube01_bottom","cube01_back","cube01_front")
+                .setNightTexByDom("cube02_right","cube02_left","cube02_top","cube02_bottom","cube02_back","cube02_front")
+				
 				//三维坐标系
 				gGridShader = new GridAxisShader(gl,gCamera.projectionMatrix); //Gray,Red,Green,Blue
 				gGridModel = Primitives.GridAxis.createModal(gl,true);
