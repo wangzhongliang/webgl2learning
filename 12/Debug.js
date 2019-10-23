@@ -56,18 +56,18 @@ class VertexDebugger{
 
     //初始化一次的uniform
     createShader(){
-        var vShader = `#version 300es
+        var vShader = `#version 300 es
         layout(location=0) in vec4 a_position;
         uniform mat4 uPMatrix;
-        uniform mat4 uPCameraMatrix;
-        uniform mat4 uMvMatrix;
+        uniform mat4 uCameraMatrix;
+        uniform mat4 uMVMatrix;
         uniform vec3 uColorAry[6];
         uniform vec3 uCameraPos;
-        uniform float uPointSzie;
+        uniform float uPointSize;
         out lowp vec4 color;
         void main(){
             vec4 pos = uMVMatrix *vec4(a_position.xyz, 1.0);
-            color = vec4(uColorAry[int(a_postion.w)],1.0);
+            color = vec4(uColorAry[int(a_position.w)],1.0);
             gl_PointSize = (1.0 - distance(uCameraPos, pos.xyz)/10.0)*uPointSize;
             gl_Position = uPMatrix * uCameraMatrix * pos;
         }
@@ -113,7 +113,7 @@ class VertexDebugger{
         this.gl.uniform3fv(this.mUniformCameraPos, new Float32Array(camera.transform.position.getArray()));
 
         //激活vertex buffer
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.mVertexComponentLen);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.mVertexBuffer);
         this.gl.enableVertexAttribArray(0);
         this.gl.vertexAttribPointer(0,this.mVertexComponentLen,this.gl.FLOAT,false,0,0);
 

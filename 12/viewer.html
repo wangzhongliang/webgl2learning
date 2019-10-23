@@ -40,52 +40,68 @@
                 gSkymap = new Skymap(gl)
                 .setDayTexByDom("cube01_right","cube01_left","cube01_top","cube01_bottom","cube01_back","cube01_front")
                 .setNightTexByDom("cube02_right","cube02_left","cube02_top","cube02_bottom","cube02_back","cube02_front")
-				
-				//三维坐标系
-				gGridShader = new GridAxisShader(gl,gCamera.projectionMatrix); //Gray,Red,Green,Blue
-				gGridModel = Primitives.GridAxis.createModal(gl,true);
+                .setTime(0.7).finalize();
+
+                gGridFloor = new GridFloor(gl);
 				
 				//四边形对象
-				gShader = new TestShader(gl, gCamera.projectionMatrix).setTexture(gl.mTextureCache["tex001"]).preRender();
-				// .setTexture(gl.mTextureCache["tex001"]);
-				// gModal = Primitives.Cube.createModal(gl);
-                // gModal.setPosition(0,0.6,0);
+                gShader = new TestShader(gl, gCamera.projectionMatrix)
+                .setTexture(gl.mTextureCache["tex001"]).preRender();
+				gModal = Primitives.Cube.createModal(gl,"Cube",true);
+                gModal.setPosition(0,0,0);
 
-                gModal2 = new Modal(ObjLoader.domToMesh("objCube","obj_file",true)[0]);
-                gModal2.setScale(0.5,0.5,0.5);
+                // gModal2 = new Modal(ObjLoader.domToMesh("objCube","obj_file",true)[0]);
+                // gModal2.setScale(0.5,0.5,0.5);
                 
-                gSkymap = new Modal(Primitives.Cube.createMesh(gl,"Skymap",10,10,10,0,0,0));
-                gSkyMapShader = new SkyMapShader(gl, gCamera.projectionMatrix,gl.mTextureCache["skybox01"],gl.mTextureCache["skybox02"]);
+                mDebug = new VertexDebugger(gl,10)
+                .addColor("#ff0000")
+                .addPoint(0,0,0,0)
+                .finalize();//加载资源和设置参数完成后调用finalize，创建shader
 
 				// gModal2 = new Modal(gl.mMeshCache["Quad"]);
                 
 				//Start Rendering
 				RLoop = new RenderLoop(onRender,30).start();
-			});
-			function onRender(dt){
-				gCamera.updateViewMatrix();
-				gl.fClear();
-                gSkyMapShader.activate().preRender()
-                .setCameraMatrix(gCamera.getTranslatelessMatrix())
-                .setTime(performance.now())
-                .renderModal(gSkymap);
+            });
+            var radius = 1.5,
+                angle = 0,
+                angleInc = 1,
+                yPos = 0,
+                yPosInc = 0.2;
 
-				gGridShader.activate()
-				.setCameraMatrix(gCamera.viewMatrix)
-				.renderModal(gGridModel.preRender());
+			function onRender(dt){
+                gl.fClear();
+                gCamera.updateViewMatrix();
+                gSkymap.render(gCamera);
+                gGridFloor.render(gCamera);
+
+                angle += angleInc *dt;
+                yPos += yPosInc *dt;
+
+                var x = radius*Math.cos(angle),
+                    y = radius*Math.sin(angle),
+                    z = MathUtil.Map(Math.sin(yPos),-1,1,0.1,2);
+                // mDebug.transform.position.set(x,y,z);
 
 				gShader.activate().preRender()
-				.setCameraMatrix(gCamera.viewMatrix)
-				// .renderModal(gModal.preRender())
-				.renderModal(gModal2.preRender());
+                .setCameraMatrix(gCamera.viewMatrix)
+                .setCameraPos(gCamera)
+                .setLightPos(mDebug)
+				.renderModal(gModal.preRender())
+                // .renderModal(gModal2.preRender());
+                
+                mDebug.render(gCamera);
 			}
 			class TestShader extends Shader{
 				constructor(gl,pMatrix){
 					var vertSrc = ShaderUtil.domShaderSrc("vertex_shader"),
 						fragSrc = ShaderUtil.domShaderSrc("fragment_shader");
 					super(gl,vertSrc,fragSrc);
-					
-					//自定义uniform
+                    //自定义uniform
+                    this.uniformLoc.lightpos = gl.getUniformLocation(this.program,"uLightPos");
+                    this.uniformLoc.campos = gl.getUniformLocation(this.program,"uCamPos");
+                    this.uniformLoc.matNorm = gl.getUniformLocation(this.program,"uNormMatrix");
+					//标准uniform
 					this.setPerspective(pMatrix);
 					this.mainTexture = -1;
 					gl.useProgram(null); //Done setting up shader
@@ -94,7 +110,17 @@
 				setTexture(texID){
 					this.mainTexture = texID;
 					return this;
-				}
+                }
+                
+                setLightPos(obj){
+                    this.gl.uniform3fv(this.uniformLoc.lightpos,new Float32Array(obj.transform.position.getArray()));
+                    return this;
+                }
+
+                setCameraPos(obj){
+                    this.gl.uniform3fv(this.uniformLoc.campos,new Float32Array(obj.transform.position.getArray()));
+                    return this;
+                }
 
 				preRender(){
 					this.gl.activeTexture(this.gl.TEXTURE0);
@@ -102,41 +128,14 @@
 					this.gl.uniform1i(this.uniformLoc.mainTexture,0);//预定义的texture uniform
 
 					return this;
-				}
+                }
+                
+                renderModal(modal){
+                    this.gl.uniformMatrix3fv(this.uniformLoc.matNorm, false, modal.transform.getNormalMatrix());
+                    super.renderModal(modal);
+                    return this;
+                }
             }
-            
-            class SkyMapShader extends Shader{
-				constructor(gl,pMatrix,dayTex,nightTex){
-					var vertSrc = ShaderUtil.domShaderSrc("sky_vshader"),
-						fragSrc = ShaderUtil.domShaderSrc("sky_fshader");
-					super(gl,vertSrc,fragSrc);
-					
-					//自定义uniform
-					this.uniformLoc.time = gl.getUniformLocation(this.program,"uTime");
-					this.uniformLoc.dayTex = gl.getUniformLocation(this.program,"uDayTex");
-					this.uniformLoc.nightTex = gl.getUniformLocation(this.program,"uNightTex");
-                    this.setPerspective(pMatrix);
-                    this.texDay = dayTex;
-                    this.texNight = nightTex;
-					gl.useProgram(null); //Done setting up shader
-				}
-
-				setTime(t){
-					this.gl.uniform1f(this.uniformLoc.time,t);
-					return this;
-				}
-
-				preRender(){
-					this.gl.activeTexture(this.gl.TEXTURE0);
-					this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.texDay);
-                    this.gl.uniform1i(this.uniformLoc.dayTex,0);//预定义的texture uniform
-                    
-                    this.gl.activeTexture(this.gl.TEXTURE1);
-					this.gl.bindTexture(this.gl.TEXTURE_CUBE_MAP, this.texNight);
-					this.gl.uniform1i(this.uniformLoc.nightTex,1);//预定义的texture uniform
-					return this;
-				}
-			}
 		</script>
 	</head>
 <body>
@@ -166,53 +165,61 @@
 		uniform mat4 uPMatrix;
 		uniform mat4 uCameraMatrix;		
 		uniform mat4 uMVMatrix;	
+		uniform mat3 uNormMatrix;	
+		uniform vec3 uCamPos;	
 		
-		out highp vec2 texCoord;
+		out vec3 vPos;
+		out vec3 vNorm;
+		out vec3 vCamPos;
+		out highp vec2 vUV;
 		
 		void main(void){
-			texCoord = a_uv;
-			gl_Position = uPMatrix * uCameraMatrix * uMVMatrix * vec4(a_position.xyz, 1.0);
+            vec4 pos = uMVMatrix * vec4(a_position.xyz, 1.0);
+            vPos = pos.xyz;
+            vNorm = uNormMatrix * a_norm;
+            vUV = a_uv;
+            vCamPos = (inverse(uCameraMatrix) * vec4(uCamPos,1.0)).xyz;//局部坐标到世界坐标?
+			gl_Position = uPMatrix * uCameraMatrix * pos;
 		}
 	</script>
 
 	<script id="fragment_shader" type="x-shader/x-fragment">#version 300 es
 		precision mediump float;
-		in highp vec2 texCoord;
-		uniform sampler2D uMainTex;
-
-		out vec4 finalColor;
-		void main(void){
-			finalColor = texture(uMainTex,texCoord);
-		}
-    </script>
-    
-    <script id="sky_vshader" type="x-shader/x-vertex">#version 300 es
-		in vec4 a_position;
-		in vec2 a_uv;
-
-		uniform mat4 uPMatrix;
-		uniform mat4 uCameraMatrix;		
-        uniform mat4 uMVMatrix;	
-        
-		out highp vec3 texCoord;
 		
+        uniform sampler2D uMainTex;
+        uniform vec3 uLightPos;
+
+        in vec3 vPos;
+        in vec3 vNorm;
+        in highp vec2 vUV;
+        in vec3 vCamPos;
+
+        out vec4 outColor;
+        
 		void main(void){
-			texCoord = a_position.xyz;
-			gl_Position = uPMatrix * uCameraMatrix *uMVMatrix* vec4(a_position.xyz, 1.0);
-		}
-	</script>
+            vec4 cBase = vec4(1.0,0.5,0.5,1.0);
+            vec3 cLight = vec3(1.0);
 
-	<script id="sky_fshader" type="x-shader/x-fragment">#version 300 es
-		precision mediump float;
+            //环境光
+            float ambientStrength = 0.15;
+            vec3 cAmbient = ambientStrength * cLight;
 
-        in highp vec3 texCoord;
-		uniform samplerCube uDayTex;
-		uniform samplerCube uNightTex;
-        uniform float uTime;
+            //漫反射光（光源位置和法向量）
+            vec3 lightDir = normalize(uLightPos-vPos);
+            float diffAngle = max(dot(vNorm,lightDir),0.0);
+            float diffuseStrength = 0.3;
+            vec3 cDiffuse = diffAngle * cLight * diffuseStrength;
 
-		out vec4 finalColor;
-		void main(void){
-			finalColor = mix(texture(uDayTex,texCoord),texture(uNightTex,texCoord),abs(sin(uTime*0.0005)));
+            //高光（光源位置、相机位置和法向量）
+            float specularStrength = 0.15;
+            float specularShininess = 256.0;
+            vec3 camDir = normalize(vCamPos - vPos);
+            vec3 reflectDir = reflect(-lightDir, vNorm);
+            float spec = pow(max(dot(reflectDir,camDir),0.0), specularShininess);
+            vec3 cSpecular = specularStrength * spec * cLight;
+
+            vec3 finalColor = (cAmbient + cDiffuse + cSpecular) * cBase.rgb;
+			outColor = vec4(finalColor,1.0);
 		}
     </script>
     
