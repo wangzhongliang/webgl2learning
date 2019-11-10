@@ -188,10 +188,10 @@ Primitives.CubeBad = class{
 }
 
 Primitives.Cube = class{
-    static createModal(gl,name){
-        return new Modal(Primitives.Cube.createMesh(gl,name||"Cube",1,1,1,0,0,0));
+    static createModel(gl,name,keepRawData){
+        return new Modal(Primitives.Cube.createMesh(gl,name||"Cube",1,1,1,0,0,0,keepRawData));
     }
-    static createMesh(gl,name,width,height,depth,x,y,z){
+    static createMesh(gl,name,width,height,depth,x,y,z,keepRawData){
         var w = width*0.5, h = height*0.5, d = depth*0.5;
 		var x0 = x-w, x1 = x+w, y0 = y-h, y1 = y+h, z0 = z-d, z1 = z+d;
 
@@ -250,6 +250,11 @@ Primitives.Cube = class{
 
         var mesh = gl.fCreateMeshVAO(name,aIndex,aVert,aNorm,aUV,4);
 		mesh.noCulling = true;	//TODO Only setting this true to view animations better.
-		return mesh;
+        if(keepRawData){ //Have the option to save the data to use for normal debugging or modifying.
+			mesh.aIndex	= aIndex;
+			mesh.aVert	= aVert;
+			mesh.aNorm	= aNorm;
+		}
+        return mesh;
     }
 }

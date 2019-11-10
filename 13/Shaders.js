@@ -189,7 +189,7 @@ class ShaderBuilder{
             this.gl = gl;
             gl.useProgram(this.program);
             this.mUniformList = {};
-            this.mTextureList = {};
+            this.mTextureList = [];
 
             this.noCulling = false;
             this.doBlending = false;
@@ -224,7 +224,7 @@ class ShaderBuilder{
                 console.log("Texture " + arguments[i+1] +"不在缓存中");
                 continue;
             }
-            loc = gl.getUniformLocation(this.propgram. arguments[i]);
+            loc = gl.getUniformLocation(this.program, arguments[i]);
             if(loc != null){
                 this.mTextureList.push({
                     loc:loc,
@@ -261,6 +261,9 @@ class ShaderBuilder{
                     break;
                 case "mat4":
                     this.gl.uniformMatrix4fv(this.mUniformList[name].loc, false, arguments[i+1]);
+                    break;
+                case "mat3":
+                    this.gl.uniformMatrix3fv(this.mUniformList[name].loc, false, arguments[i+1]);
                     break;
                 default:
                     console.log("未知的uniform类型:"+name);
@@ -301,6 +304,25 @@ class ShaderBuilder{
                 this.gl.uniform1i(this.mTextureList[i].loc, i);
             }
         }
+        return this;
+    }
+
+    rednerModel(model, doShaderClose){
+        this.setUniforms("uMVMatrix",model.transform.getViewMatrix());
+        this.gl.bindVertexArray(model.mesh.vao);
+
+        if(model.mesh.noCulling || this.noCulling) this.gl.disable(this.gl.CULL_FACE);
+        if(model.mesh.doBlending || this.doBlending) this.gl.enable(this.gl.BLEND);
+
+        if(model.mesh.indexCount) this.gl.drawElements(model.mesh.drawMode, model.mesh.indexCount, gl.UNSIGNED_SHORT,0);
+        else this.gl.drawArrays(model.mesh.drawMode,0,model.mesh.vertexCount);
+
+        this.gl.bindVertexArray(null);
+        if(model.mesh.noCulling || this.noCulling) this.gl.enable(this.gl.CULL_FACE);
+        if(model.mesh.doBlending || this.doBlending) this.gl.disable(this.gl.BLEND);
+
+        if(doShaderClose) this.gl.useProgram(null);
+
         return this;
     }
 }
