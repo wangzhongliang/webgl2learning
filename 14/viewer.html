@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<style>
+			html,body{margin:0px; padding:0px; width:100%; height:100%;}
+			body{background-color:#404040;}
+			canvas{border:1px solid black;}
+			div{display:flex; width:100%; height:100%; align-items:center; justify-content:center;}
+		</style>
+
+		<script src="gl.js"></script>
+		<script src="Math.js"></script>
+		<script src="Shaders.js"></script>
+		<script src="RenderLoop.js"></script>
+		<script src="Transform.js"></script>
+		<script src="Modal.js"></script>
+		<script src="Primitives.js"></script>
+		<script src="Camera.js"></script>
+		<script src="ObjLoader.js"></script>
+		<script src="Debug.js"></script>
+		<script src="Skymap.js"></script>
+		<script src="GridFloor.js"></script>
+		<script src="Resources.js"></script>
+
+		<script>
+            var gl, gRLoop,	gShader, gModal, gCamera, gCameraCtrl,gSkymap
+            var gGridFloor, mDebug, mDebugLine;
+			var gModal2;
+			window.addEventListener("load",function(){
+				//Main Setup
+				gl = GLInstance("glcanvas").fFitScreen(0.95,0.9).fClear();
+				
+				gCamera = new Camera(gl);
+				gCamera.transform.position.set(0,1,3);
+				gCameraCtrl = new CameraController(gl,gCamera);
+
+                gGridFloor = new GridFloor(gl);
+				//Start Rendering
+				gRLoop = new RenderLoop(onRender,30);
+				
+                Resources.setup(gl,onReady).loadTexture(
+                    "tex001","../common/uv.jpg"
+                    ,"mask_a","./mask_square.png"
+                    ,"mask_b","./mask_cornercircles.png").start();
+            });
+
+            function onReady(){
+                gShader = new ShaderBuilder(gl,"vertex_shader","fragment_shader")
+                .prepareUniforms("uPMatrix","mat4"
+                ,"uMVMatrix","mat4"
+                ,"uCameraMatrix","mat4"
+                ,"uLightPos","3fv"
+                ,"uCamPos","3fv"
+                ,"uColors","3fv"
+                ,"uNormMatrix","mat3")
+                .prepareTextures("uTexture","tex001","uMask_A","mask_a","uMask_B","mask_b")
+                .setUniforms("uPMatrix",gCamera.projectionMatrix
+                ,"uLightPos",[0.0,0.6,2.0]
+                ,"uCamPos",gCamera.transform.position.getArray()
+                ,"uColors",GlUtil.rgbArray("880000","ff9999"));
+
+                gModel = Primitives.Cube.createModel(gl,"Cube",true)
+                .setPosition(0,0.6,0);
+
+                gRLoop.start();
+            }
+
+			function onRender(dt){
+                gl.fClear();
+                gCamera.updateViewMatrix();
+                gGridFloor.render(gCamera);
+
+                gShader.preRender("uCameraMatrix",gCamera.viewMatrix
+                ,"uCamPos",gCamera.transform.position.getArray()
+                ,"uLightPos",[0.0,0.6,2.0],
+                "uNormMatrix",gModel.transform.getNormalMatrix())
+				.rednerModel(gModel.preRender(),false);
+			}
+			
+		</script>
+	</head>
+<body>
+	<div>
+		<canvas id="glcanvas"></canvas>
+	</div>
+	<script id="vertex_shader" type="x-shader/x-vertex">#version 300 es
+		in vec4 a_position;	//Standard position data.
+		in vec3 a_norm;
+		in vec2 a_uv;
+
+		uniform mat4 uPMatrix;
+		uniform mat4 uCameraMatrix;		
+		uniform mat4 uMVMatrix;	
+		uniform mat3 uNormMatrix;	
+		uniform vec3 uCamPos;	
+		
+		out vec3 vPos;
+		out vec3 vNorm;
+		out vec3 vCamPos;
+		out highp vec2 vUV;
+		
+		void main(void){
+            vec4 pos = uMVMatrix * vec4(a_position.xyz, 1.0);
+            vPos = pos.xyz;
+            vNorm = uNormMatrix * a_norm;
+            vUV = a_uv;
+            vCamPos = (inverse(uCameraMatrix) * vec4(uCamPos,1.0)).xyz;//局部坐标到世界坐标?
+			gl_Position = uPMatrix * uCameraMatrix * pos;
+		}
+	</script>
+
+	<script id="fragment_shader" type="x-shader/x-fragment">#version 300 es
+		precision mediump float;
+        uniform sampler2D uTexture;
+        uniform sampler2D uMask_A;
+        uniform sampler2D uMask_B;
+        uniform vec3[2] uColors;
+        uniform vec3 uLightPos;
+
+        in vec3 vPos;
+        in vec3 vNorm;
+        in vec3 vCamPos;
+        in highp vec2 vUV;
+        out vec4 outColor;
+        
+		void main(void){
+            // vec4 cBase = vec4(1.0,0.5,0.5,1.0);
+            vec4 mask_a = texture(uMask_A,vUV*2.0);
+            vec4 mask_b = texture(uMask_B,vUV*2.0);
+            float c = min(mask_a.r + mask_b.r, 1.0);
+            vec4 cBase = mix(texture(uTexture,vUV),vec4(uColors[1],1.0),c);
+            vec3 cLight = vec3(1.0);
+
+            //环境光
+            float ambientStrength = 0.15;
+            vec3 cAmbient = ambientStrength * cLight;
+
+            //漫反射光（光源位置和法向量）
+            vec3 lightDir = normalize(uLightPos-vPos);
+            float diffAngle = max(dot(vNorm,lightDir),0.0);
+            float diffuseStrength = 0.3;
+            vec3 cDiffuse = diffAngle * cLight * diffuseStrength;
+
+            //高光（光源位置、相机位置和法向量）
+            float specularStrength = 0.2;
+            float specularShininess = 1.0;
+            vec3 camDir = normalize(vCamPos - vPos);
+            vec3 reflectDir = reflect(-lightDir, vNorm);
+            float spec = pow(max(dot(reflectDir,camDir),0.0), specularShininess);
+            vec3 cSpecular = specularStrength * spec * cLight;
+
+            vec3 finalColor = (cAmbient + cDiffuse + cSpecular) * cBase.rgb;
+			outColor = vec4(finalColor,1.0);
+		}
+    </script>
+</body>
+</html>
